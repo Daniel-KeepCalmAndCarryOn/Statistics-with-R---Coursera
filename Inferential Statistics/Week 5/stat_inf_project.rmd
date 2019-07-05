@@ -1,0 +1,158 @@
+---
+title: "Statistical inference with the GSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+```
+
+### Load data
+
+Make sure your data and R Markdown files are in the same directory. When loaded
+your data file will be called `gss`. Delete this note when before you submit 
+your work. 
+
+```{r load-data}
+load("gss.Rdata")
+```
+
+
+
+* * *
+
+## Part 1: Data
+
+**Background**
+
+According to the General Social Survey (GSS) project description, since 1972, the GSS has been monitoring societal change and studying the growing complexity of American society. The GSS aims to gather data on contemporary American society in order to monitor and explain trends and constants in attitudes, behaviors, and attributes; to examine the structure and functioning of society in general as well as the role played by relevant subgroups; to compare the United States to other societies in order to place American society in comparative perspective and develop cross-national models of human society; and to make high-quality data easily accessible to scholars, students, policy makers, and others, with minimal cost and waiting.
+
+**Methodology**
+
+This data was collected from all noninstitutionalized, English and Spanish speaking persons 18 years of age or older, residing in the United States. In addition, the data was collected by conducting surveys, including computer-assisted personal interview (CAPI), face-to-face interview, and telephone interview. According to Appendix A of the ICPSR Codebook, the sample is a multi-stage area probability sample to the block or segment level. The sampling involves three stages that are selections of the Primary Sampling Units (PSUs), selections of block groups (BGs) and enumeration districts (EDs), and selections of blocks. Stratification is embedded in the selection process based on factors such as region, age, and race. In addition, to minimize the potential sample biases mainly due to not-at-homes, the interviewers are given instructions to canvass and interview only after 3:00 p.m. on weekdays or during the weekend or holidays.
+
+
+**Generalizability and Causality**
+
+Given the sampling methodology above, this observational study is therefore generalized to the adult, English and Spanish speaking, household population of the United States. Since this study is a typical observational study that did not involve random assignments, the conclusion drawn by this study is therefore only correlational but not causal.
+
+
+## Part 2: Research question
+
+Does there appear to be a relationship between gender and attitudes towards sex relations before marriage?
+
+Stereotypically speaking, men may be more likely to accept pre-marriage sex relations compared to women. However, is this stereotype supported by statistical data? Even so, is the relationship statisticallly significant at a specific significant level? Let's explore.
+
+The analysis includes the following variables:
+
++ sex: respondent's sex
++ premarsx: attitudes towards sex before marriage
+
+
+## Part 3: Exploratory data analysis
+
+First, let's explore the distribution of men's and women's attitudes towards pre-marriage sex with NA values excluded.
+```{r}
+premarsx_gender <- gss %>%
+    filter(premarsx != "NA") %>%
+    group_by(sex, premarsx) %>%
+    summarize(count = n()) %>%
+    mutate("percentage(%)" = round(100*count/sum(count), digits = 2))
+
+premarsx_gender
+```
+
+From the summary table, we can see that "Not Wrong At All" accounts for 48.12% of the attitudes in terms of men's, whereas relatively low for 37.01% in terms of women's. Let's plot the comparison in a relative frequency segmented bar plot to see the difference visually.
+```{r}
+gss %>%
+    filter(premarsx != "NA") %>%
+    ggplot(aes(x = sex, fill = premarsx)) +
+    geom_bar(position = "fill") +
+    labs(title = "Attitudes towards Pre-marriage Sex vs Gender",
+         x = "Gender",
+         y = "Proportion",
+         fill = "Attitudes towards Pre-marriage Sex")
+```
+
+Based on the plot, we can tell that while the proportion of the groups of "Almost Always Wrong" and "Sometimes Wrong" are comparable between two genders, men's "Not Wrong At All" and "Always Wrong" are proportionally larger and smaller than women's, respectively. Therefore, at this stage, we can interpret that men may be more likely to accept pre-marriage sex compared to women. Next, we will use statistical inference to test whether this statement holds true statistically.
+
+
+## Part 4: Inference
+
+**Method**
+
+Given that we are evaluating the relationship between two categorical variables, gender and attitudes towards pre-marriage sex, the test needed here is the chi-square independence test. Also, in such a case, no other methods are applicable here to verify the test result.
+
+**Conditions**
+
+Before jumping into the calculation, let's first examine the conditions required for the chi-square test. The test requires the independence of sampled observations. The detailed requirements are shown below:
+
+1. Random sample/assignment
+
+    + Yes, the interviewees involved in the survey were randomly sampled. This study does not involve assignment, though.
+    
+2. If sampling without replacement, n < 10% of population
+
+    + Yes, the sample size is less than 10% of the adult, English-speaking and Spanish-speaking, household population in the United States without a doubt.
+    
+3. Each case only contributes to one cell in the table
+
+    + Yes, each cell in the table only represents one of the genders and one of the attitudes.
+
+Since the conditions are met, the theoretical chi-square test can be applied in this study.
+
+**Hypotheses**
+
+H<sub>0</sub>: Gender and attitudes towards pre-marriage sex are independent
+
+H<sub>A</sub>: Gender and attitudes towards pre-marriage sex are dependent
+
+**Inference**
+
+```{r}
+# Store the observed values into a list called ob_list
+ob_list <- premarsx_gender$count
+
+# The ratio of male interviewees in the overall samples: 
+male_ratio <- sum(filter(premarsx_gender, sex == "Male")$count)/sum(premarsx_gender$count)
+
+# Expected value of each attitude with respect to gender
+male_AW <- round(sum(filter(premarsx_gender, premarsx == "Always Wrong")$count) * male_ratio)
+male_AAW <- round(sum(filter(premarsx_gender, premarsx == "Almst Always Wrg")$count) * male_ratio)
+male_SW <- round(sum(filter(premarsx_gender, premarsx == "Sometimes Wrong")$count) * male_ratio)
+male_NWAA <- sum(filter(premarsx_gender, sex == "Male")$count) - male_AW - male_AAW - male_SW
+
+female_AW <- sum(filter(premarsx_gender, premarsx == "Always Wrong")$count) - male_AW
+female_AAW <- sum(filter(premarsx_gender, premarsx == "Almst Always Wrg")$count) - male_AAW
+female_SW <- sum(filter(premarsx_gender, premarsx == "Sometimes Wrong")$count) - male_SW
+female_NWAA <- sum(filter(premarsx_gender, premarsx == "Not Wrong At All")$count) - male_NWAA
+
+# The value of chi_square
+chi_square <- (ob_list[1]-male_AW)^2/male_AW + (ob_list[2]-male_AAW)^2/male_AAW + (ob_list[3]-male_SW)^2/male_SW + (ob_list[4]-male_NWAA)^2/male_NWAA + (ob_list[5]-female_AW)^2/female_AW + (ob_list[6]-female_AAW)^2/female_AAW + (ob_list[7]-female_SW)^2/female_SW + (ob_list[8]-female_NWAA)^2/female_NWAA
+
+# The degree of freedom
+df <- (2-1)*(4-1)
+
+# The p-value
+pchisq(chi_square, df, lower.tail = FALSE)
+```
+
+**Confidence Interval**
+
+There is no associated confidence interval because this is a chi-square test.
+
+**Conclusion**
+
+It can be concluded that at a significance level of 5% and with the p-value nearly 0, the null hypothesis is rejected in favor of the alternative hypothesis that there does exist a relationship between gender and attitudes towards pre-marriage sex. Again, this conclusion is only generalized to noninstitutionalized, English and Spanish speaking persons 18 years of age or older, residing in the United States. Also, considering that this an observational study, we cannot conclude that the difference in attitudes towards pre-marriage sex is simply due to gender. This is because there might be other factors, such as race and religion, that affect attitudes towards pre-marriage sex, and these factors might be correlated to gender. To delve into such factors, further studies are needed.
+
+
